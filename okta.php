@@ -15,7 +15,6 @@ Documentation: https://developer.okta.com/quickstart/#/okta-sign-in-page/php/gen
 */
 
 defined ( 'ABSPATH' ) or die( 'No dice.' );
-
 if( ! class_exists( 'Okta' ) ) {
 
   class Okta {
@@ -34,7 +33,6 @@ if( ! class_exists( 'Okta' ) ) {
       $this->client_id = defined( 'OKTA_CLIENT_ID' ) ? OKTA_CLIENT_ID : ( $is_network ? get_site_option( 'okta_client_id' ) : get_option( 'okta_client_id' ) );
       $this->client_secret = defined( 'OKTA_CLIENT_SECRET' ) ? OKTA_CLIENT_SECRET : ( $is_network ? get_site_option( 'okta_client_secret' ) : get_option( 'okta_client_secret' ) );
       $this->auth_secret = base64_encode( $this->client_id . ':' . $this->client_secret );
-      $this->base_url = $this->org_url . '/oauth2/default/v1';
 
       /*
       Redirect URI for Okta authentication loop
@@ -134,7 +132,7 @@ if( ! class_exists( 'Okta' ) ) {
       */
 
       $user = json_decode ( $user['body'] );
-      $this->Login ( $user );
+      $this->Login ( $user, $token->access_token );
 
     }
 
@@ -143,13 +141,14 @@ if( ! class_exists( 'Okta' ) ) {
     */
 
     function Token ( $code ) {
-
-      $url = $this->base_url . '/token?' . http_build_query (
-        [
-          'grant_type' => 'authorization_code',
-          'code' => $code,
-          'redirect_uri' => get_rest_url( null, 'okta/auth' )
-        ]
+      $params = array(
+        'grant_type' => 'authorization_code',
+        'code' => $code,
+        'redirect_uri' => get_rest_url( null, 'okta/auth' )
+      );
+      $params = apply_filters( 'okta_default_params', $params );
+      $url = $this->base_url() . '/token?' . http_build_query (
+        $params
       );
 
       $response = wp_safe_remote_post( $url, array(
@@ -171,8 +170,7 @@ if( ! class_exists( 'Okta' ) ) {
     */
 
     function User ( $token ){
-
-      $url = $this->base_url . '/userinfo';
+      $url = $this->base_url() . '/userinfo';
       $response = wp_safe_remote_post ( $url, array(
         'headers' => array (
           'Accept' => 'application/json',
@@ -182,8 +180,7 @@ if( ! class_exists( 'Okta' ) ) {
         ),
         'sslverify' => false
       ) );
-
-      return $response;
+      return apply_filters( 'okta_user', $response, $token );
 
     }
 
@@ -191,7 +188,7 @@ if( ! class_exists( 'Okta' ) ) {
     Login the user
     */
 
-    function Login ( $user_response ){
+    function Login ( $user_response, $access_token = null ){
 
       /*
       Get the user
@@ -209,6 +206,7 @@ if( ! class_exists( 'Okta' ) ) {
       wp_set_current_user ( $user->ID, $user->user_login );
       wp_set_auth_cookie ( $user->ID );
       do_action ( 'wp_login', $user->user_login, $user );
+      do_action( 'okta_user_login', $user->ID, $access_token );
 
       /*
       Redirect the user
@@ -287,7 +285,7 @@ if( ! class_exists( 'Okta' ) ) {
 
     function LoginMessage () {
 
-      $url = apply_filters ( 'okta_login', $this->base_url . '/authorize?' . $query = http_build_query (
+      $url = apply_filters ( 'okta_login', $this->base_url() . '/authorize?' . $query = http_build_query (
         [
           'client_id' => $this->client_id,
           'response_type' => 'code',
@@ -523,6 +521,25 @@ if( ! class_exists( 'Okta' ) ) {
       }
     }
 
+    function base_url() {
+      return $this->org_url . apply_filters( 'okta_issuer_uri', '/oauth2/default/v1' );
+    }
+
+    /**
+     * Decode a string with URL-safe Base64.
+     *
+     * @param string $input A Base64 encoded string
+     *
+     * @return string A decoded string
+     */
+    public static function urlsafeB64Decode( $input ) {
+      $remainder = strlen( $input ) % 4;
+      if ( $remainder ) {
+        $padlen = 4 - $remainder;
+        $input .= str_repeat( '=', $padlen );
+      }
+      return base64_decode( strtr( $input, '-_', '+/' ) );
+    }
   }
 
   new Okta;

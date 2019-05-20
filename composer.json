@@ -1,0 +1,11 @@
+{
+  "name": "zillowgroup/wp-okta-authentication",
+  "type": "wordpress-plugin",
+  "license": "EULA",
+  "description": "WordPress plugin for Okta Authentication",
+  "homepage": "https://github.com/zillowgroup/wp-okta-authentication",
+  "require": {
+    "php": ">=5.4",
+    "composer/installers": "~1.0.12"
+  }
+}
